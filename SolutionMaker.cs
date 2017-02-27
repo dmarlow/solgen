@@ -88,8 +88,6 @@ namespace SolGen
 
                 _solutionProjects[path] = pinfo;
 
-                CreatePath(pinfo);
-
                 GatherProjectReferences(pinfo);
                 Console.WriteLine(pinfo);
             }
@@ -114,54 +112,12 @@ namespace SolGen
             }
         }
 
-        private void CreatePath(ProjectInfo projectInfo)
-        {
-            string projectFolderPath = !projectInfo.IsFolder ? 
-                Path.GetDirectoryName(projectInfo.FilePath) :
-                projectInfo.FilePath;
-
-            if (projectFolderPath == null)
-                return;
-
-            if (!_solutionProjects.ContainsKey(projectFolderPath))
-            {
-                var folder = new ProjectInfo
-                {
-                    Filename = Path.GetFileName(projectFolderPath),
-                    FilePath = Path.GetDirectoryName(projectFolderPath),
-                    IsFolder = true
-                };
-
-                if (string.IsNullOrEmpty(folder.Filename))
-                    return;
-
-                if (_commonRoot.StartsWith(projectFolderPath, StringComparison.CurrentCultureIgnoreCase))
-                {
-                    _commonRoot = projectFolderPath;
-                }
-
-                else if (!projectFolderPath.StartsWith(_commonRoot, StringComparison.CurrentCultureIgnoreCase))
-                {
-                    _commonRoot = string.Empty;
-                }
-
-                _solutionProjects.Add(projectFolderPath, folder);
-
-                projectInfo.FolderGuid = folder.ProjectGuid;
-                CreatePath(folder);
-            }
-            else
-            {
-                projectInfo.FolderGuid = _solutionProjects[projectFolderPath].ProjectGuid;
-            }
-        }
-
         private void WriteSolutionFile(string solutionFile)
         {
             StreamWriter writer = new StreamWriter(solutionFile);
 
-            writer.WriteLine("Microsoft Visual Studio Solution File, Format Version 11.00");
-            writer.WriteLine("# Visual Studio 2010");
+            writer.WriteLine("Microsoft Visual Studio Solution File, Format Version 12.00");
+            writer.WriteLine("# Visual Studio 14");
 
             foreach (ProjectInfo projectInfo in _solutionProjects.Values)
             {
@@ -173,23 +129,9 @@ namespace SolGen
                 }
             }
 
-            // Project and folder relations
             writer.WriteLine("Global");
-            writer.WriteLine("\tGlobalSection(NestedProjects) = preSolution");
-            const string format = "\t\t{0} = {1}";
-
-            // Folder relations
-            foreach (ProjectInfo folderInfo in _solutionProjects.Values)
-            {
-                if (folderInfo.ProjectGuid != null && folderInfo.FolderGuid != null && folderInfo.FilePath != _commonRoot)
-                {
-                    writer.WriteLine(format, folderInfo.ProjectGuid, folderInfo.FolderGuid);
-                }
-            }
-
-            writer.WriteLine("\tEndGlobalSection");
             writer.WriteLine("\tGlobalSection(SolutionConfigurationPlatforms) = preSolution");
-            string [] buildModes = { "Debug", "Release" };
+            string [] buildModes = { "Local" };
             foreach(var buildMode in buildModes)
             {
                 foreach (var buildConfig in _buildConfigurations)
@@ -243,34 +185,22 @@ namespace SolGen
         private static void WriteProjectEntry(TextWriter writer, ProjectInfo projectInfo, string rootFolder)
         {
             string projectPath;
-            string guid;
 
-            if (projectInfo.IsFolder == false)
+            string projectDir = Path.GetDirectoryName(projectInfo.FilePath) ?? string.Empty;
+            if (projectDir.StartsWith(rootFolder, StringComparison.InvariantCultureIgnoreCase))
             {
-                string projectDir = Path.GetDirectoryName(projectInfo.FilePath) ?? string.Empty;
-                if (projectDir.StartsWith(rootFolder, StringComparison.InvariantCultureIgnoreCase))
-                {
-                    projectPath = Path.Combine(projectInfo.FilePath, projectInfo.Filename).Substring(rootFolder.Length + 1);
-                }
-                else
-                {
-                    projectPath = GetRelativePath(rootFolder, Path.Combine(projectInfo.FilePath, projectInfo.Filename));
-                }
-
-                guid = LookupGuid(Path.GetExtension(projectInfo.Filename));
+                projectPath = Path.Combine(projectInfo.FilePath, projectInfo.Filename).Substring(rootFolder.Length + 1);
             }
             else
             {
-                projectPath = projectInfo.ProjectGuid;
-                guid = FolderGuid;
+                projectPath = GetRelativePath(rootFolder, Path.Combine(projectInfo.FilePath, projectInfo.Filename));
             }
 
-            if (guid != null)
-            {
-                string format = "Project('{0}') = '{1}', '{2}', '{3}'".Replace('\'', '"');
-                writer.WriteLine(format, guid, projectInfo.Filename, projectPath, projectInfo.ProjectGuid);
-                writer.WriteLine("EndProject");
-            }
+            var guid = LookupGuid(Path.GetExtension(projectInfo.Filename));
+
+            string format = "Project('{0}') = '{1}', '{2}', '{3}'".Replace('\'', '"');
+            writer.WriteLine(format, guid, projectInfo.Filename, projectPath, projectInfo.ProjectGuid);
+            writer.WriteLine("EndProject");
         }
 
         private static string GetRelativePath(string fromPath, string toPath)

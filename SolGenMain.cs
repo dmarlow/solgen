@@ -32,7 +32,6 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace SolGen
@@ -65,64 +64,24 @@ namespace SolGen
 
             try
             {
-                SolutionMaker maker;
-                string solutionPath;
-
-                if (GetArg("h", string.Empty) != string.Empty)
+                string [] projectFiles = Directory.GetFiles(".", "*.*proj", SearchOption.TopDirectoryOnly);
+                if (projectFiles.Length == 0)
                 {
-                    Console.WriteLine("Usage: solgen [/configs:<comma separated list of build configurations to generate>] [project files]\n");
-                    Console.WriteLine("Examples:");
-                    Console.WriteLine("          solgen");
-                    Console.WriteLine("                 will search for all project files recursively from current directory and add them and dependencies to the generated solution");
-                    Console.WriteLine("          solgen myproject.csproj");
-                    Console.WriteLine("                 will add myproject.csproj and dependencies to the generated solution");
-                    Console.WriteLine("          solgen myproject.proj");
-                    Console.WriteLine("                 will add myproject.proj and dependencies to the generated solution");
-                    Console.WriteLine("          solgen /configx:x64 myproject.csproj");
-                    Console.WriteLine("                 will add myproject.csproj and dependencies to the generated solution with build configuration x64");
-                    Console.WriteLine("          solgen /configx:x64,x86 myproject.csproj");
-                    Console.WriteLine("                 will add myproject.csproj and dependencies to the generated solution with build configurations x64 and x86");
+                    Console.Error.WriteLine("No project files found");
                     return;
                 }
 
-                List<string> filePaths = GetArg("", new List<string>());
-                if (filePaths.Count > 0)
+                if (projectFiles.Length > 1)
                 {
-                    string filepath = Path.GetFullPath(filePaths[0]);
-                    solutionPath = GetSolutionFileName(Path.GetDirectoryName(filepath), Path.GetFileNameWithoutExtension(filepath));
-                    maker = new SolutionMaker(solutionPath, buildConfigurations);
-                    maker.AddProject(filepath);
-                    foreach (string p in filePaths.Skip(1))
-                    {
-                        maker.AddProject(Path.GetFullPath(p));
-                    }
-                }
-                else
-                {
-                    string [] projectFiles = Directory.GetFiles(".", "*.*proj", SearchOption.AllDirectories);
-                    if (projectFiles.Length == 0)
-                    {
-                        throw new InvalidOperationException("No project files found");
-                    }
-
-                    if (projectFiles.Length == 1)
-                    {
-                        string filePath = Path.GetFullPath(projectFiles[0]);
-                        solutionPath = GetSolutionFileName(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath));
-                    }
-                    else
-                    {
-                        string fileName = Path.GetFileName(Environment.CurrentDirectory);
-                        solutionPath = GetSolutionFileName(Environment.CurrentDirectory, fileName);
-                    }
-
-                    maker = new SolutionMaker(solutionPath, buildConfigurations);
-                    foreach (string projectFile in projectFiles)
-                    {
-                        maker.AddProject(Path.GetFullPath(projectFile));
-                    }
+                    Console.Error.WriteLine("Multiple project files found");
+                    return;
                 }
 
+                string filePath = Path.GetFullPath(projectFiles[0]);
+                var solutionPath = GetSolutionFileName(Path.GetDirectoryName(filePath) + "\\..", Path.GetFileNameWithoutExtension(filePath));
+
+                var maker = new SolutionMaker(solutionPath, buildConfigurations);
+                maker.AddProject(Path.GetFullPath(projectFiles[0]));
                 maker.CreateSolution();
 
                 string vsPath = Environment.GetEnvironmentVariable("SOLGEN_VS_PATH");
@@ -148,7 +107,7 @@ namespace SolGen
         {
             string fileNameSuffix = ConfigurationManager.AppSettings[GeneratedSolutionFileNameSuffixConfigPropertyName] ?? string.Empty;
             
-            return Path.Combine(directory, filename + fileNameSuffix + ".sln");
+            return Path.GetFullPath(Path.Combine(directory, "Generated." + filename + fileNameSuffix + ".sln"));
         }
 
         private T GetArg<T>(string argName, T defaultValue)
